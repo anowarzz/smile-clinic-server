@@ -51,14 +51,9 @@ run().catch(console.log)
 
 
 
-
-
-
-
-
 // Basic server setUp
 app.get('/', (req, res) => {
-    res.send('Smile Clinic server in running')
+    res.send('Smile Clinic server in running and flying')
 })
 
 // Server running checkup
