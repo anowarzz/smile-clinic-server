@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const { MongoClient, ServerApiVersion } = require("mongodb");
-const jwt = require('jsonwebtoken');
+const jwt = require("jsonwebtoken");
 require("dotenv").config();
 const port = process.env.PORT || 5000;
 const app = express();
@@ -19,25 +19,25 @@ const client = new MongoClient(uri, {
   serverApi: ServerApiVersion.v1,
 });
 
-
 // Verifying Jwt token
-function verifyJWT(req, res, next){
-  console.log('token inside verify token', req.headers.authorization);
+function verifyJWT(req, res, next) {
+  console.log("token inside verify token", req.headers.authorization);
 
-  const authHeader =  req.headers.authorization;
-  if(!authHeader){
-    return res.status(401).send('Unauthorized access')
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).send("Unauthorized access");
   }
 
-  const token = authHeader.split(' ')[1];
+  const token = authHeader.split(" ")[1];
 
-
-
+  jwt.verify(token, process.env.ACCESS_TOKEN, function (err, decoded) {
+    if (err) {
+      return res.status(403).send({ message: "Forbidden access" });
+    }
+    req.decoded = decoded;
+    next();
+  });
 }
-
-
-
-
 
 // MongoDb Crud Operations
 async function run() {
@@ -82,50 +82,51 @@ async function run() {
     });
 
     // api with version number
-    app.get("/v2/appointmentOptions", async(req, res) => {
+    app.get("/v2/appointmentOptions", async (req, res) => {
       const date = req.query.date;
-      const options = await appointmentOptionCollection.aggregate([
-        {
-          $lookup: {
-            from: "bookings",
-            localField: "name",
-            foreignField: "treatment",
-            pipeline: [
-              {
-                $match: {
-                  $expr: {
-                    $eq: ["$appointmentDate", date],
+      const options = await appointmentOptionCollection
+        .aggregate([
+          {
+            $lookup: {
+              from: "bookings",
+              localField: "name",
+              foreignField: "treatment",
+              pipeline: [
+                {
+                  $match: {
+                    $expr: {
+                      $eq: ["$appointmentDate", date],
+                    },
                   },
                 },
-              },
-              
-            ],
-            as: "booked",
+              ],
+              as: "booked",
+            },
           },
-        },
-        {
+          {
             $project: {
-                name: 1,
-                slots: 1, 
-                booked: {
-                    $map: {
-                        input: '$booked',
-                        as: 'book',
-                        in: '$book.slot'
-                    }
-                }
-            }
-        },
-        {
-        $project: {
-            name: 1, 
-            slots: {
-                setDifference: ['$slots1', '$booked']
-            }
-        }
-        }
-      ]).toArray();
-      res.send(options)
+              name: 1,
+              slots: 1,
+              booked: {
+                $map: {
+                  input: "$booked",
+                  as: "book",
+                  in: "$book.slot",
+                },
+              },
+            },
+          },
+          {
+            $project: {
+              name: 1,
+              slots: {
+                setDifference: ["$slots1", "$booked"],
+              },
+            },
+          },
+        ])
+        .toArray();
+      res.send(options);
     });
 
     // Sending appointment bookings to DB
@@ -135,57 +136,63 @@ async function run() {
       const query = {
         appointmentDate: booking.appointmentDate,
         email: booking.email,
-        treatment: booking.treatment
-      }
+        treatment: booking.treatment,
+      };
       const alreadyBooked = await bookingsCollection.find(query).toArray();
 
-      if(alreadyBooked.length){
-        const message = `You already have a booking on ${booking.appointmentDate}`
-        return res.send({acknowledged: false, message})
+      if (alreadyBooked.length) {
+        const message = `You already have a booking on ${booking.appointmentDate}`;
+        return res.send({ acknowledged: false, message });
       }
-
 
       const result = await bookingsCollection.insertOne(booking);
       res.send(result);
     });
 
-
-
     // Loading My appointments from server
-    app.get('/bookings', verifyJWT, async(req, res) => {
+    app.get("/bookings", verifyJWT, async (req, res) => {
       const email = req.query.email;
-      const query = {email : email}
+
+      const decodedEmail = req.decoded.email;
+
+      if (email !== decodedEmail) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+
+      const query = { email: email };
       const bookings = await bookingsCollection.find(query).toArray();
-      res.send(bookings)
+      res.send(bookings);
+    });
+
+    // sending jwt token to client side while login/signup
+    app.get("/jwt", async (req, res) => {
+      const email = req.query.email;
+      const query = { email: email };
+      const user = await usersCollection.findOne(query);
+
+      if (user) {
+        const token = jwt.sign({ email }, process.env.ACCESS_TOKEN, {
+          expiresIn: "1d",
+        });
+        return res.send({ accessToken: token });
+      }
+
+      res.status(403).send({ accessToken: "" });
+    });
+
+    // Saving User information in database
+    app.post("/users", async (req, res) => {
+      const user = req.body;
+      const result = usersCollection.insertOne(user);
+      res.send(result);
+    });
+
+    // Loading all users to display in all users
+    app.get('/users', async(req, res) => {
+      const query = {};
+      const users = await usersCollection.find(query).toArray();
+      res.send(users)
     })
-
-
-
-// jwt token
-app.get('/jwt', async(req, res) => {
-
-  const email = req.query.email;
-  const query = {email: email}
-  const user = await usersCollection.findOne(query);
-
-  if(user){
-  const token = jwt.sign({email}, process.env.ACCESS_TOKEN, {expiresIn: '1d'})
-  return res.send({accessToken: token})
-  } 
-
-  res.status(403).send({accessToken: '' })
-  
-
-})
-
-
-
-// Saving User information in database
-app.post('/users', async(req, res) => {
-  const user = req.body;
-  const result = usersCollection.insertOne(user)
-  res.send(result)
-})
 
 
   } finally {
