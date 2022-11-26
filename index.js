@@ -49,6 +49,7 @@ async function run() {
     const bookingsCollection = client.db("SmileClinic").collection("bookings");
 
     const usersCollection = client.db("SmileClinic").collection("users");
+    const doctorsCollection = client.db("SmileClinic").collection("doctors");
 
     // Use Aggregate to query multiple collection and then merge data
     app.get("/appointmentOptions", async (req, res) => {
@@ -82,52 +83,52 @@ async function run() {
     });
 
     // api with version number
-    app.get("/v2/appointmentOptions", async (req, res) => {
-      const date = req.query.date;
-      const options = await appointmentOptionCollection
-        .aggregate([
-          {
-            $lookup: {
-              from: "bookings",
-              localField: "name",
-              foreignField: "treatment",
-              pipeline: [
-                {
-                  $match: {
-                    $expr: {
-                      $eq: ["$appointmentDate", date],
-                    },
-                  },
-                },
-              ],
-              as: "booked",
-            },
-          },
-          {
-            $project: {
-              name: 1,
-              slots: 1,
-              booked: {
-                $map: {
-                  input: "$booked",
-                  as: "book",
-                  in: "$book.slot",
-                },
-              },
-            },
-          },
-          {
-            $project: {
-              name: 1,
-              slots: {
-                setDifference: ["$slots1", "$booked"],
-              },
-            },
-          },
-        ])
-        .toArray();
-      res.send(options);
-    });
+    // app.get("/v2/appointmentOptions", async (req, res) => {
+    //   const date = req.query.date;
+    //   const options = await appointmentOptionCollection
+    //     .aggregate([
+    //       {
+    //         $lookup: {
+    //           from: "bookings",
+    //           localField: "name",
+    //           foreignField: "treatment",
+    //           pipeline: [
+    //             {
+    //               $match: {
+    //                 $expr: {
+    //                   $eq: ["$appointmentDate", date],
+    //                 },
+    //               },
+    //             },
+    //           ],
+    //           as: "booked",
+    //         },
+    //       },
+    //       {
+    //         $project: {
+    //           name: 1,
+    //           slots: 1,
+    //           booked: {
+    //             $map: {
+    //               input: "$booked",
+    //               as: "book",
+    //               in: "$book.slot",
+    //             },
+    //           },
+    //         },
+    //       },
+    //       {
+    //         $project: {
+    //           name: 1,
+    //           slots: {
+    //             setDifference: ["$slots1", "$booked"],
+    //           },
+    //         },
+    //       },
+    //     ])
+    //     .toArray();
+    //   res.send(options);
+    // });
 
     // Sending appointment bookings to DB
     app.post("/bookings", async (req, res) => {
@@ -227,8 +228,37 @@ app.get('/users/admin/:email', async(req, res) => {
  res.send({isAdmin : user?.role === 'admin'})
 })
 
+// Doctor specialty name for while adding a doctor
+app.get('/appointmentSpecialty', async(req, res) => {
+  const query = {}
+  const result = await appointmentOptionCollection.find(query).project({name: 1}).toArray();
+  res.send(result)
+})
 
+// saving doctor to database
+app.post('/doctors', verifyJWT, async(req, res) => {
+  const doctor = req.body;
+  const result = await doctorsCollection.insertOne(doctor);
+  res.send(result)
+})
+
+// Displaying all doctors in manage doctors
+app.get('/doctors',verifyJWT, async(req, res) => {
+  const query = {};
+  const doctors = await doctorsCollection.find(query).toArray();
+  res.send(doctors)
+})
+
+// Deleting one doctor
+app.delete('/doctors/:id', async(req, res) => {
+  const id = req.params.id;
+  const query = {_id: ObjectId(id)};
+  const result = await doctorsCollection.deleteOne(query);
+  res.send(result)
+
+})
   } finally {
+    
   }
 }
 
