@@ -51,6 +51,23 @@ async function run() {
     const usersCollection = client.db("SmileClinic").collection("users");
     const doctorsCollection = client.db("SmileClinic").collection("doctors");
 
+
+// Verify admin has to run after verify jwt
+const verifyAdmin = async(req, res, next) => {
+
+const decodedEmail = req.decoded.email;
+const query = {email : decodedEmail}
+const user = await usersCollection.findOne(query);
+
+if(user?.role !== 'admin'){
+  return res.status(403).send({message: 'forbidden access'})
+}
+next();
+}
+
+
+
+
     // Use Aggregate to query multiple collection and then merge data
     app.get("/appointmentOptions", async (req, res) => {
       const date = req.query.date;
@@ -197,16 +214,9 @@ async function run() {
 
 
 // Making an user admin (updating user info)
-app.put('/users/admin/:id', verifyJWT, async(req, res) => {
-
-const decodedEmail = req.decoded.email;
-const query = {email : decodedEmail}
-const user = await usersCollection.findOne(query);
+app.put('/users/admin/:id', verifyJWT, verifyAdmin, async(req, res) => {
 
 
-if(user?.role !== 'admin'){
-  return res.status(403).send({message: 'forbidden access'})
-}
   const id = req.params.id;
   const filter = {_id: ObjectId(id)}
   const options = {upsert: true}
@@ -235,30 +245,30 @@ app.get('/appointmentSpecialty', async(req, res) => {
   res.send(result)
 })
 
-// saving doctor to database
-app.post('/doctors', verifyJWT, async(req, res) => {
+// adding a  doctor to database
+app.post('/doctors', verifyJWT, verifyAdmin, async(req, res) => {
   const doctor = req.body;
   const result = await doctorsCollection.insertOne(doctor);
   res.send(result)
 })
 
 // Displaying all doctors in manage doctors
-app.get('/doctors',verifyJWT, async(req, res) => {
+app.get('/doctors',verifyJWT, verifyAdmin, async(req, res) => {
   const query = {};
   const doctors = await doctorsCollection.find(query).toArray();
   res.send(doctors)
 })
 
 // Deleting one doctor
-app.delete('/doctors/:id', async(req, res) => {
+app.delete('/doctors/:id', verifyJWT, verifyAdmin, async(req, res) => {
   const id = req.params.id;
-  const query = {_id: ObjectId(id)};
-  const result = await doctorsCollection.deleteOne(query);
+  const filter = {_id: ObjectId(id)};
+  const result = await doctorsCollection.deleteOne(filter);
   res.send(result)
 
 })
   } finally {
-    
+
   }
 }
 
